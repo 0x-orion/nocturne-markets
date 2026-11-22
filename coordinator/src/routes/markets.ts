@@ -98,13 +98,24 @@ export const marketRoutes: FastifyPluginAsync<MarketRoutesOptions> = async (
 
   /**
    * GET /api/markets
-   * Returns list of all mirrored markets with masked pot totals while OPEN.
-   * Supports filtering by status, event_slug, and category (Politics|Crypto|Sports|Others).
+   * Returns list of mirrored markets with masked pot totals while OPEN.
+   * Supports filtering by status, event_slug, and category with pagination.
    */
   fastify.get<{
-    Querystring: { event_slug?: string; status?: any; category?: string };
+    Querystring: {
+      event_slug?: string;
+      status?: any;
+      category?: string;
+      limit?: string;
+      offset?: string;
+    };
   }>("/api/markets", async (req, reply) => {
+    reply.header("Access-Control-Allow-Origin", "*");
+    reply.header("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=60");
+
     const { event_slug, status, category } = req.query;
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit || "80", 10) || 80), 200);
+    const offset = Math.max(0, parseInt(req.query.offset || "0", 10) || 0);
 
     let markets: MarketRecord[];
     if (event_slug) {
@@ -117,8 +128,15 @@ export const marketRoutes: FastifyPluginAsync<MarketRoutesOptions> = async (
       if (status) {
         markets = markets.filter((m) => m.status === status);
       }
+      markets = markets.slice(offset, offset + limit);
     } else {
-      markets = db.listMarkets({ status, category });
+      const targetStatus = status || "OPEN";
+      markets = db.listMarkets({
+        status: targetStatus === "ALL" ? undefined : targetStatus,
+        category,
+        limit,
+        offset,
+      });
     }
 
     const formatted = markets.map((m) => formatMarketResponse(m, db));
@@ -130,7 +148,16 @@ export const marketRoutes: FastifyPluginAsync<MarketRoutesOptions> = async (
    * Returns directory grouped strictly by Politics, Crypto, Sports, and Others.
    */
   fastify.get("/api/markets/directory", async (req, reply) => {
-    const allMarkets = db.listMarkets();
+    reply.header("Access-Control-Allow-Origin", "*");
+    reply.header("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+
+    const categories: Array<"Politics" | "Crypto" | "Sports" | "Others"> = [
+      "Politics",
+      "Crypto",
+      "Sports",
+      "Others",
+    ];
+
     const directory: Record<"Politics" | "Crypto" | "Sports" | "Others", any[]> = {
       Politics: [],
       Crypto: [],
@@ -138,14 +165,11 @@ export const marketRoutes: FastifyPluginAsync<MarketRoutesOptions> = async (
       Others: [],
     };
 
-    for (const m of allMarkets) {
-      const cat = (m.category as "Politics" | "Crypto" | "Sports" | "Others") || "Others";
-      const formatted = formatMarketResponse(m, db);
-      if (directory[cat]) {
-        directory[cat].push(formatted);
-      } else {
-        directory.Others.push(formatted);
-      }
+    let total = 0;
+    for (const cat of categories) {
+      const catMarkets = db.listMarkets({ status: "OPEN", category: cat, limit: 20 });
+      directory[cat] = catMarkets.map((m) => formatMarketResponse(m, db));
+      total += directory[cat].length;
     }
 
     return reply.send({
@@ -155,7 +179,7 @@ export const marketRoutes: FastifyPluginAsync<MarketRoutesOptions> = async (
         Sports: { count: directory.Sports.length, markets: directory.Sports },
         Others: { count: directory.Others.length, markets: directory.Others },
       },
-      total: allMarkets.length,
+      total,
     });
   });
 
@@ -165,6 +189,8 @@ export const marketRoutes: FastifyPluginAsync<MarketRoutesOptions> = async (
    * Includes zero-POST encryption parameters, 1.52x payout multiplier, and seconds_left countdown.
    */
   fastify.get("/api/markets/blitz", async (req, reply) => {
+    reply.header("Access-Control-Allow-Origin", "*");
+    reply.header("Cache-Control", "no-store, no-cache, must-revalidate");
     const now = Math.floor(Date.now() / 1000);
     const openMarkets = db.listMarkets({ status: "OPEN" });
     let blitzMarket = openMarkets.find(
@@ -199,6 +225,8 @@ export const marketRoutes: FastifyPluginAsync<MarketRoutesOptions> = async (
    * Pots remain sealed/null while OPEN.
    */
   fastify.get<{ Params: { id: string } }>("/api/markets/:id", async (req, reply) => {
+    reply.header("Access-Control-Allow-Origin", "*");
+    reply.header("Cache-Control", "public, max-age=10, s-maxage=15, stale-while-revalidate=30");
     const { id } = req.params;
     let market = db.getMarket(id);
 
@@ -231,6 +259,8 @@ export const marketRoutes: FastifyPluginAsync<MarketRoutesOptions> = async (
     Params: { id: string };
     Querystring: { interval?: string; fidelity?: number };
   }>("/api/markets/:id/history", async (req, reply) => {
+    reply.header("Access-Control-Allow-Origin", "*");
+    reply.header("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=300");
     const { id } = req.params;
     const interval = (req.query.interval || "1d").toLowerCase();
     const validInterval = ["1d", "1w", "1m", "max"].includes(interval) ? interval : "1d";
@@ -331,6 +361,8 @@ export const marketRoutes: FastifyPluginAsync<MarketRoutesOptions> = async (
    * Pots and sides are masked while OPEN.
    */
   fastify.get<{ Params: { id: string } }>("/api/markets/:id/audit", async (req, reply) => {
+    reply.header("Access-Control-Allow-Origin", "*");
+    reply.header("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
     const { id } = req.params;
     const market = db.getMarket(id);
 

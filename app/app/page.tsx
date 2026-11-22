@@ -4,7 +4,7 @@ import Market from "./components/Market";
 import type { MarketSummary } from "@/lib/polymarket_url";
 import Footer from "./components/Footer";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 30;
 
 const COORDINATOR_URL =
   process.env.NEXT_PUBLIC_COORDINATOR_URL ||
@@ -13,8 +13,8 @@ const COORDINATOR_URL =
 
 async function getMarkets(): Promise<MarketSummary[]> {
   try {
-    const res = await fetch(`${COORDINATOR_URL}/api/markets`, {
-      next: { revalidate: 15 },
+    const res = await fetch(`${COORDINATOR_URL}/api/markets?limit=80`, {
+      next: { revalidate: 30 },
     });
     if (!res.ok) return [];
     const data = await res.json();

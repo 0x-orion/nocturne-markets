@@ -129,6 +129,16 @@ export async function syncPolymarketMarketsOnce(
   const now = Math.floor(Date.now() / 1000);
   let synced = 0;
 
+  // Prune dead markets that have no bets and closed > 3 days ago to keep SQLite compact
+  try {
+    const pruned = db.pruneDeadMarkets(3);
+    if (pruned > 0) {
+      console.log(`[PolymarketSync] Pruned ${pruned} stale markets with no bets.`);
+    }
+  } catch (err: any) {
+    console.warn("[PolymarketSync] Failed to prune stale markets:", err.message);
+  }
+
   try {
     for (let page = 0; page < maxPages; page++) {
       const offset = page * 100;

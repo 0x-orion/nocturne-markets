@@ -190,25 +190,59 @@ export class CoordinatorDatabase {
     );
   }
 
-  public listMarkets(filter?: { status?: MarketStatus; category?: string }): MarketRecord[] {
+  public listMarkets(filter?: {
+    status?: MarketStatus;
+    category?: string;
+    limit?: number;
+    offset?: number;
+  }): MarketRecord[] {
+    const hasLimit = typeof filter?.limit === "number";
+    const limit = filter?.limit ?? 100;
+    const offset = filter?.offset ?? 0;
+
     if (filter?.status && filter?.category) {
-      const stmt = this.db.prepare(
-        "SELECT * FROM markets WHERE status = ? AND LOWER(category) = LOWER(?) ORDER BY close_time ASC"
-      );
-      return (stmt.all(filter.status, filter.category) as any[]) as MarketRecord[];
+      const sql = hasLimit
+        ? "SELECT * FROM markets WHERE status = ? AND LOWER(category) = LOWER(?) ORDER BY close_time ASC LIMIT ? OFFSET ?"
+        : "SELECT * FROM markets WHERE status = ? AND LOWER(category) = LOWER(?) ORDER BY close_time ASC";
+      const stmt = this.db.prepare(sql);
+      return (hasLimit
+        ? stmt.all(filter.status, filter.category, limit, offset)
+        : stmt.all(filter.status, filter.category)) as MarketRecord[];
     }
     if (filter?.status) {
-      const stmt = this.db.prepare("SELECT * FROM markets WHERE status = ? ORDER BY close_time ASC");
-      return (stmt.all(filter.status) as any[]) as MarketRecord[];
+      const sql = hasLimit
+        ? "SELECT * FROM markets WHERE status = ? ORDER BY close_time ASC LIMIT ? OFFSET ?"
+        : "SELECT * FROM markets WHERE status = ? ORDER BY close_time ASC";
+      const stmt = this.db.prepare(sql);
+      return (hasLimit
+        ? stmt.all(filter.status, limit, offset)
+        : stmt.all(filter.status)) as MarketRecord[];
     }
     if (filter?.category) {
-      const stmt = this.db.prepare(
-        "SELECT * FROM markets WHERE LOWER(category) = LOWER(?) ORDER BY close_time ASC"
-      );
-      return (stmt.all(filter.category) as any[]) as MarketRecord[];
+      const sql = hasLimit
+        ? "SELECT * FROM markets WHERE LOWER(category) = LOWER(?) ORDER BY close_time ASC LIMIT ? OFFSET ?"
+        : "SELECT * FROM markets WHERE LOWER(category) = LOWER(?) ORDER BY close_time ASC";
+      const stmt = this.db.prepare(sql);
+      return (hasLimit
+        ? stmt.all(filter.category, limit, offset)
+        : stmt.all(filter.category)) as MarketRecord[];
     }
-    const stmt = this.db.prepare("SELECT * FROM markets ORDER BY close_time ASC");
-    return (stmt.all() as any[]) as MarketRecord[];
+    const sql = hasLimit
+      ? "SELECT * FROM markets ORDER BY close_time ASC LIMIT ? OFFSET ?"
+      : "SELECT * FROM markets ORDER BY close_time ASC";
+    const stmt = this.db.prepare(sql);
+    return (hasLimit ? stmt.all(limit, offset) : stmt.all()) as MarketRecord[];
+  }
+
+  public pruneDeadMarkets(maxAgeDays: number = 3): number {
+    const cutoff = Math.floor(Date.now() / 1000) - maxAgeDays * 86400;
+    const stmt = this.db.prepare(`
+      DELETE FROM markets 
+      WHERE (status != 'OPEN' OR close_time < ?)
+        AND id NOT IN (SELECT DISTINCT market_id FROM bets)
+    `);
+    const result = stmt.run(cutoff);
+    return Number(result.changes || 0);
   }
 
   public updateMarketStatus(

@@ -43,7 +43,7 @@ export async function processSettlementOnce(
   let payoutsCreated = 0;
 
   // 1. Process OPEN markets that have reached close time
-  const openMarkets = db.listMarkets({ status: "OPEN" });
+  const openMarkets = db.listMarkets({ status: "OPEN", limit: 100 });
 
   for (const market of openMarkets) {
     if (market.close_time > now) continue;
@@ -94,7 +94,7 @@ export async function processSettlementOnce(
   }
 
   // 2. Process CLOSED markets ready for resolution & payout
-  const closedMarkets = db.listMarkets({ status: "CLOSED" });
+  const closedMarkets = db.listMarkets({ status: "CLOSED", limit: 50 });
 
   for (const market of closedMarkets) {
     // For Blitz markets or test markets, resolve outcome automatically

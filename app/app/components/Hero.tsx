@@ -250,7 +250,7 @@ export default function Hero({ initialMarkets = [] }: HeroProps) {
     }
   }, [initialMarkets]);
 
-  // Live polling: refreshes market data every 15 seconds from coordinator
+  // Live polling: refreshes market data every 45 seconds from coordinator
   useEffect(() => {
     let mounted = true;
     const coordinatorUrl =
@@ -259,8 +259,9 @@ export default function Hero({ initialMarkets = [] }: HeroProps) {
       "http://127.0.0.1:3000";
 
     const fetchLiveMarkets = async () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       try {
-        const res = await fetch(`${coordinatorUrl}/api/markets`, {
+        const res = await fetch(`${coordinatorUrl}/api/markets?limit=80`, {
           headers: { Accept: "application/json" },
         });
         if (!res.ok) return;
@@ -277,7 +278,7 @@ export default function Hero({ initialMarkets = [] }: HeroProps) {
       fetchLiveMarkets();
     }
 
-    const interval = setInterval(fetchLiveMarkets, 15000);
+    const interval = setInterval(fetchLiveMarkets, 45000);
     return () => {
       mounted = false;
       clearInterval(interval);

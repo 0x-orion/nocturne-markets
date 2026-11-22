@@ -72,7 +72,7 @@ export async function pollDepositsOnce(
       let market = db.getMarket(decoded.marketId.toString());
       if (!market) {
         // Fallback: search open markets whose normalized id matches
-        const allMarkets = db.listMarkets();
+        const allMarkets = db.listMarkets({ status: "OPEN", limit: 200 });
         market =
           allMarkets.find((m) => {
             if (m.id === decoded.marketId.toString()) return true;
@@ -82,7 +82,7 @@ export async function pollDepositsOnce(
 
       // If no specific market was found, link to the currently active market or default
       if (!market) {
-        const openMarkets = db.listMarkets({ status: "OPEN" });
+        const openMarkets = db.listMarkets({ status: "OPEN", limit: 1 });
         if (openMarkets.length > 0) {
           market = openMarkets[0];
         }

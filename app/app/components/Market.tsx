@@ -84,8 +84,9 @@ function MarketContent({ initialMarkets = [] }: MarketProps) {
       "http://127.0.0.1:3000";
 
     const fetchMarkets = async () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       try {
-        const res = await fetch(`${coordinatorUrl}/api/markets`, {
+        const res = await fetch(`${coordinatorUrl}/api/markets?limit=80`, {
           headers: { Accept: "application/json" },
         });
         if (!res.ok) return;
@@ -103,7 +104,7 @@ function MarketContent({ initialMarkets = [] }: MarketProps) {
       fetchMarkets();
     }
 
-    const interval = setInterval(fetchMarkets, 20000);
+    const interval = setInterval(fetchMarkets, 45000);
     return () => {
       mounted = false;
       clearInterval(interval);
